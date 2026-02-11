@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PopAndStack Web Demo</title>
+  <style>
+    :root {
+      --cream: #f8ead6;
+      --sky: #dbe6fb;
+      --mint: #c5f0df;
+      --rose: #f7b9c7;
+      --peach: #f9cfb5;
+      --ink: #2b2b2b;
+      --line: rgba(248, 125, 150, 0.35);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Gill Sans", "Trebuchet MS", "Verdana", sans-serif;
+      color: var(--ink);
+      background: linear-gradient(160deg, var(--cream), var(--sky));
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    .shell {
+      width: min(1100px, 92vw);
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 24px;
+      align-items: center;
+    }
+
+    .panel {
+      background: rgba(255, 255, 255, 0.78);
+      border-radius: 18px;
+      padding: 20px 22px;
+      box-shadow: 0 18px 40px rgba(44, 44, 44, 0.12);
+      backdrop-filter: blur(12px);
+    }
+
+    .panel h1 {
+      font-size: 28px;
+      margin: 0 0 8px;
+      letter-spacing: 0.8px;
+    }
+
+    .panel p {
+      margin: 8px 0;
+      line-height: 1.4;
+    }
+
+    .stat {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 600;
+      margin-top: 8px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      padding: 6px 12px;
+      background: var(--mint);
+      font-size: 12px;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+    }
+
+    .canvas-wrap {
+      position: relative;
+      border-radius: 22px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(32, 32, 32, 0.18);
+      background: linear-gradient(170deg, #fde7df, #d8e8ff);
+      aspect-ratio: 3 / 4;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .hud {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      pointer-events: none;
+      font-weight: 600;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .pill {
+      background: rgba(255, 255, 255, 0.75);
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 13px;
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.92);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .overlay.show {
+      display: flex;
+    }
+
+    .bubbles {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.55;
+    }
+
+    .bubble {
+      position: absolute;
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.7), transparent 70%);
+      animation: float 12s ease-in-out infinite;
+    }
+
+    .bubble:nth-child(1) { top: 10%; left: 8%; animation-delay: 0s; }
+    .bubble:nth-child(2) { top: 60%; left: 70%; animation-delay: -4s; }
+    .bubble:nth-child(3) { top: 25%; left: 60%; animation-delay: -7s; }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0px) scale(1); }
+      50% { transform: translateY(-18px) scale(1.08); }
+    }
+
+    @media (max-width: 900px) {
+      .shell {
+        grid-template-columns: 1fr;
+      }
+
+      .panel {
+        order: -1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="canvas-wrap panel">
+      <div class="hud">
+        <div class="pill" id="score">Score 0</div>
+        <div class="pill" id="combo">Combo x1</div>
+        <div class="pill" id="phase">Gravity Down</div>
+      </div>
+      <canvas id="game"></canvas>
+      <div class="overlay" id="overlay">Game Over<br>Click to restart</div>
+      <div class="bubbles">
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+        <div class="bubble"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="badge">Web Demo</div>
+      <h1>PopAndStack</h1>
+      <p>Click or tap to drop pastel balls. Match identical colors to merge and score.
+         Gravity rotates every few seconds, so the danger line moves with it.</p>
+      <p><strong>Goal:</strong> build combo chains and survive the shifts.</p>
+      <div class="stat"><span>Gravity phase</span><span id="phaseTime">10.0s</span></div>
+      <div class="stat"><span>Best combo</span><span id="bestCombo">x1</span></div>
+      <p>Tip: drop near the center when gravity flips to avoid instant danger.</p>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const scoreEl = document.getElementById("score");
+    const comboEl = document.getElementById("combo");
+    const phaseEl = document.getElementById("phase");
+    const overlayEl = document.getElementById("overlay");
+    const phaseTimeEl = document.getElementById("phaseTime");
+    const bestComboEl = document.getElementById("bestCombo");
+
+    const levelColors = [
+      "#f8c7b2",
+      "#bfeedd",
+      "#b8d7fb",
+      "#f6b8d9",
+      "#d0c2fb",
+      "#fbe1a9",
+      "#f8a0a0"
+    ];
+
+    const world = {
+      width: 10,
+      height: 14,
+      lineOffset: 1.1,
+      gravityStrength: 18,
+      phaseDuration: 10,
+      spawnOffset: 0.8
+    };
+
+    const gravityPhases = [
+      { x: 0, y: -1, label: "Down" },
+      { x: -1, y: 0, label: "Left" },
+      { x: 0, y: 1, label: "Up" },
+      { x: 1, y: 0, label: "Right" }
+    ];
+
+    const state = {
+      balls: [],
+      score: 0,
+      combo: 1,
+      bestCombo: 1,
+      lastMerge: 0,
+      comboWindow: 2.0,
+      gravityIndex: 0,
+      nextPhase: performance.now() + world.phaseDuration * 1000,
+      gameOver: false,
+      flash: 0
+    };
+
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * window.devicePixelRatio;
+      canvas.height = rect.height * window.devicePixelRatio;
+      ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+    }
+
+    window.addEventListener("resize", resize);
+    resize();
+
+    function spawnBall(x) {
+      const radius = 0.45;
+      state.balls.push({
+        x: x,
+        y: world.height / 2 - world.spawnOffset,
+        vx: (Math.random() - 0.5) * 0.6,
+        vy: 0,
+        level: 0,
+        r: radius
+      });
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function handleInput(event) {
+      if (state.gameOver) {
+        reset();
+        return;
+      }
+      const rect = canvas.getBoundingClientRect();
+      const x = ((event.clientX - rect.left) / rect.width - 0.5) * world.width;
+      spawnBall(clamp(x, -world.width / 2 + 0.6, world.width / 2 - 0.6));
+    }
+
+    canvas.addEventListener("click", handleInput);
+
+    function updateGravity(time) {
+      if (time < state.nextPhase) {
+        return;
+      }
+      state.gravityIndex = (state.gravityIndex + 1) % gravityPhases.length;
+      state.nextPhase = time + world.phaseDuration * 1000;
+      state.flash = 0.35;
+    }
+
+    function updatePhysics(dt) {
+      const g = gravityPhases[state.gravityIndex];
+      for (const ball of state.balls) {
+        ball.vx += g.x * world.gravityStrength * dt;
+        ball.vy += g.y * world.gravityStrength * dt;
+
+        ball.x += ball.vx * dt;
+        ball.y += ball.vy * dt;
+
+        ball.vx *= 0.995;
+        ball.vy *= 0.995;
+
+        const halfW = world.width / 2;
+        const halfH = world.height / 2;
+
+        if (ball.x - ball.r < -halfW) {
+          ball.x = -halfW + ball.r;
+          ball.vx *= -0.6;
+        } else if (ball.x + ball.r > halfW) {
+          ball.x = halfW - ball.r;
+          ball.vx *= -0.6;
+        }
+
+        if (ball.y - ball.r < -halfH) {
+          ball.y = -halfH + ball.r;
+          ball.vy *= -0.6;
+        } else if (ball.y + ball.r > halfH) {
+          ball.y = halfH - ball.r;
+          ball.vy *= -0.6;
+        }
+      }
+    }
+
+    function resolveCollisions() {
+      const merged = new Set();
+      for (let i = 0; i < state.balls.length; i++) {
+        for (let j = i + 1; j < state.balls.length; j++) {
+          if (merged.has(i) || merged.has(j)) continue;
+          const a = state.balls[i];
+          const b = state.balls[j];
+          if (a.level !== b.level) continue;
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const dist = Math.hypot(dx, dy);
+          const minDist = a.r + b.r;
+          if (dist < minDist * 0.92) {
+            merged.add(i);
+            merged.add(j);
+            const level = Math.min(a.level + 1, levelColors.length - 1);
+            const newBall = {
+              x: (a.x + b.x) / 2,
+              y: (a.y + b.y) / 2,
+              vx: (a.vx + b.vx) / 2,
+              vy: (a.vy + b.vy) / 2 - 2,
+              level: level,
+              r: 0.45 + 0.15 * level
+            };
+            state.balls.push(newBall);
+            a.dead = true;
+            b.dead = true;
+
+            const now = performance.now() / 1000;
+            if (now - state.lastMerge <= state.comboWindow) {
+              state.combo += 1;
+            } else {
+              state.combo = 1;
+            }
+            state.lastMerge = now;
+            state.combo = Math.min(state.combo, 5);
+            state.score += (level + 1) * 10 * state.combo;
+            state.bestCombo = Math.max(state.bestCombo, state.combo);
+          }
+        }
+      }
+
+      state.balls = state.balls.filter(ball => !ball.dead);
+    }
+
+    function checkGameOver() {
+      const g = gravityPhases[state.gravityIndex];
+      const halfW = world.width / 2;
+      const halfH = world.height / 2;
+
+      for (const ball of state.balls) {
+        if (g.y < -0.1 && ball.y + ball.r > halfH - world.lineOffset) return true;
+        if (g.y > 0.1 && ball.y - ball.r < -halfH + world.lineOffset) return true;
+        if (g.x < -0.1 && ball.x + ball.r > halfW - world.lineOffset) return true;
+        if (g.x > 0.1 && ball.x - ball.r < -halfW + world.lineOffset) return true;
+      }
+      return false;
+    }
+
+    function updateComboDecay() {
+      const now = performance.now() / 1000;
+      if (state.combo > 1 && now - state.lastMerge > state.comboWindow) {
+        state.combo = 1;
+      }
+    }
+
+    function reset() {
+      state.balls = [];
+      state.score = 0;
+      state.combo = 1;
+      state.bestCombo = 1;
+      state.lastMerge = 0;
+      state.gravityIndex = 0;
+      state.nextPhase = performance.now() + world.phaseDuration * 1000;
+      state.gameOver = false;
+      state.flash = 0;
+      overlayEl.classList.remove("show");
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const halfW = world.width / 2;
+      const halfH = world.height / 2;
+      const scale = canvas.getBoundingClientRect().width / world.width;
+
+      ctx.save();
+      ctx.translate(canvas.width / (2 * window.devicePixelRatio), canvas.height / (2 * window.devicePixelRatio));
+      ctx.scale(scale, -scale);
+
+      drawDangerLine();
+
+      for (const ball of state.balls) {
+        drawBall(ball);
+      }
+
+      ctx.restore();
+
+      if (state.flash > 0) {
+        ctx.save();
+        ctx.globalAlpha = state.flash;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      }
+    }
+
+    function drawBall(ball) {
+      ctx.beginPath();
+      ctx.fillStyle = levelColors[ball.level];
+      ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      ctx.arc(ball.x - ball.r * 0.25, ball.y + ball.r * 0.25, ball.r * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawDangerLine() {
+      const g = gravityPhases[state.gravityIndex];
+      const halfW = world.width / 2;
+      const halfH = world.height / 2;
+      ctx.save();
+      ctx.strokeStyle = "rgba(248, 125, 150, 0.45)";
+      ctx.lineWidth = 0.08;
+
+      if (g.y < -0.1) {
+        ctx.beginPath();
+        ctx.moveTo(-halfW, halfH - world.lineOffset);
+        ctx.lineTo(halfW, halfH - world.lineOffset);
+        ctx.stroke();
+      } else if (g.y > 0.1) {
+        ctx.beginPath();
+        ctx.moveTo(-halfW, -halfH + world.lineOffset);
+        ctx.lineTo(halfW, -halfH + world.lineOffset);
+        ctx.stroke();
+      } else if (g.x < -0.1) {
+        ctx.beginPath();
+        ctx.moveTo(halfW - world.lineOffset, -halfH);
+        ctx.lineTo(halfW - world.lineOffset, halfH);
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(-halfW + world.lineOffset, -halfH);
+        ctx.lineTo(-halfW + world.lineOffset, halfH);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    let lastTime = performance.now();
+    function loop(time) {
+      const dt = Math.min((time - lastTime) / 1000, 0.016 * 3);
+      lastTime = time;
+
+      if (!state.gameOver) {
+        updateGravity(time);
+        updatePhysics(dt);
+        resolveCollisions();
+        updateComboDecay();
+        state.gameOver = checkGameOver();
+        if (state.gameOver) {
+          overlayEl.classList.add("show");
+        }
+      }
+
+      if (state.flash > 0) {
+        state.flash = Math.max(0, state.flash - dt * 1.8);
+      }
+
+      const secondsLeft = Math.max(0, (state.nextPhase - time) / 1000);
+      phaseTimeEl.textContent = secondsLeft.toFixed(1) + "s";
+      scoreEl.textContent = "Score " + state.score;
+      comboEl.textContent = "Combo x" + state.combo;
+      phaseEl.textContent = "Gravity " + gravityPhases[state.gravityIndex].label;
+      bestComboEl.textContent = "x" + state.bestCombo;
+
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    reset();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
