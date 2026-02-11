@@ -18,6 +18,12 @@ namespace PopAndStack
         [SerializeField] private float comboWindow = 2.0f;
         [SerializeField] private int maxComboMultiplier = 5;
 
+        [Header("Visuals")]
+        [SerializeField] private Color backgroundTop = new Color(0.98f, 0.90f, 0.84f);
+        [SerializeField] private Color backgroundBottom = new Color(0.86f, 0.90f, 0.98f);
+        [SerializeField] private Color lineColor = new Color(0.98f, 0.50f, 0.60f, 0.35f);
+        [SerializeField] private float flashDuration = 0.18f;
+
         [Header("Physics")]
         [SerializeField] private Vector2 gravity = new Vector2(0f, -18f);
 
@@ -26,13 +32,13 @@ namespace PopAndStack
 
         private readonly List<Color> levelColors = new List<Color>
         {
-            new Color(0.98f, 0.72f, 0.26f),
-            new Color(0.31f, 0.84f, 0.63f),
-            new Color(0.35f, 0.61f, 0.98f),
-            new Color(0.94f, 0.42f, 0.62f),
-            new Color(0.54f, 0.38f, 0.91f),
-            new Color(0.98f, 0.58f, 0.23f),
-            new Color(0.96f, 0.30f, 0.24f)
+            new Color(0.98f, 0.78f, 0.70f),
+            new Color(0.70f, 0.90f, 0.84f),
+            new Color(0.70f, 0.82f, 0.98f),
+            new Color(0.96f, 0.70f, 0.88f),
+            new Color(0.80f, 0.72f, 0.98f),
+            new Color(0.98f, 0.86f, 0.66f),
+            new Color(0.98f, 0.62f, 0.62f)
         };
 
         private Camera mainCamera;
@@ -55,6 +61,9 @@ namespace PopAndStack
         private Transform gameOverTransform;
         private float lastMergeTime;
         private int comboCount;
+        private SpriteRenderer backgroundRenderer;
+        private SpriteRenderer flashRenderer;
+        private float flashTimer;
 
         private void Awake()
         {
@@ -76,6 +85,7 @@ namespace PopAndStack
             }
 
             gravityStrength = gravity.magnitude;
+            CreateBackground();
             CreateBounds();
             InitializeGravityPhases();
             CreateUi();
@@ -95,6 +105,7 @@ namespace PopAndStack
 
             UpdateGravityPhase();
             UpdateComboDecay();
+            UpdateFlash();
 
             if (Input.GetMouseButtonDown(0))
             {
@@ -169,6 +180,8 @@ namespace PopAndStack
             renderer.color = levelColors[level];
             renderer.sortingOrder = 1;
 
+            CreateShadow(ballObject, levelColors[level]);
+
             CircleCollider2D collider = ballObject.AddComponent<CircleCollider2D>();
             collider.radius = radius;
 
@@ -227,6 +240,11 @@ namespace PopAndStack
             line.AddComponent<GameOverLine>();
             gameOverCollider = collider;
             gameOverTransform = line.transform;
+
+            SpriteRenderer renderer = line.AddComponent<SpriteRenderer>();
+            renderer.sprite = CreateSolidSprite(lineColor);
+            renderer.color = lineColor;
+            renderer.sortingOrder = 0;
         }
 
         private void CreateUi()
@@ -366,13 +384,94 @@ namespace PopAndStack
                 for (int x = 0; x < size; x++)
                 {
                     float distance = Vector2.Distance(new Vector2(x, y), center);
-                    Color pixel = distance <= radius ? color : new Color(0f, 0f, 0f, 0f);
-                    texture.SetPixel(x, y, pixel);
+                    if (distance <= radius)
+                    {
+                        float t = distance / radius;
+                        Color highlight = Color.Lerp(color, Color.white, (1f - t) * 0.35f);
+                        Color pixel = Color.Lerp(highlight, color, t * 0.6f);
+                        texture.SetPixel(x, y, pixel);
+                    }
+                    else
+                    {
+                        texture.SetPixel(x, y, new Color(0f, 0f, 0f, 0f));
+                    }
                 }
             }
 
             texture.Apply();
             return Sprite.Create(texture, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size / (radius * 2f));
+        }
+
+        private Sprite CreateSolidSprite(Color color)
+        {
+            Texture2D texture = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+            texture.SetPixel(0, 0, color);
+            texture.Apply();
+            return Sprite.Create(texture, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1f);
+        }
+
+        private void CreateShadow(GameObject ballObject, Color baseColor)
+        {
+            GameObject shadow = new GameObject("Shadow");
+            shadow.transform.SetParent(ballObject.transform, false);
+            shadow.transform.localPosition = new Vector3(0.08f, -0.08f, 0f);
+
+            SpriteRenderer renderer = shadow.AddComponent<SpriteRenderer>();
+            Color shadowColor = new Color(baseColor.r * 0.7f, baseColor.g * 0.7f, baseColor.b * 0.7f, 0.45f);
+            renderer.sprite = CreateCircleSprite(64, shadowColor);
+            renderer.color = shadowColor;
+            renderer.sortingOrder = 0;
+        }
+
+        private void CreateBackground()
+        {
+            GameObject background = new GameObject("Background");
+            background.transform.position = Vector3.zero;
+
+            backgroundRenderer = background.AddComponent<SpriteRenderer>();
+            backgroundRenderer.sprite = CreateGradientSprite(256, 256, backgroundTop, backgroundBottom);
+            backgroundRenderer.sortingOrder = -2;
+
+            FitSpriteToCamera(backgroundRenderer);
+            CreateFlashOverlay();
+        }
+
+        private void CreateFlashOverlay()
+        {
+            GameObject flash = new GameObject("GravityFlash");
+            flash.transform.position = Vector3.zero;
+
+            flashRenderer = flash.AddComponent<SpriteRenderer>();
+            flashRenderer.sprite = CreateSolidSprite(new Color(1f, 1f, 1f, 0f));
+            flashRenderer.sortingOrder = 2;
+
+            FitSpriteToCamera(flashRenderer);
+        }
+
+        private void FitSpriteToCamera(SpriteRenderer renderer)
+        {
+            float height = mainCamera.orthographicSize * 2f;
+            float width = height * mainCamera.aspect;
+            renderer.transform.localScale = new Vector3(width, height, 1f);
+        }
+
+        private Sprite CreateGradientSprite(int width, int height, Color top, Color bottom)
+        {
+            Texture2D texture = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            texture.filterMode = FilterMode.Bilinear;
+
+            for (int y = 0; y < height; y++)
+            {
+                float t = (float)y / (height - 1);
+                Color row = Color.Lerp(bottom, top, t);
+                for (int x = 0; x < width; x++)
+                {
+                    texture.SetPixel(x, y, row);
+                }
+            }
+
+            texture.Apply();
+            return Sprite.Create(texture, new Rect(0, 0, width, height), new Vector2(0.5f, 0.5f), 100f);
         }
 
         private void InitializeGravityPhases()
@@ -402,6 +501,7 @@ namespace PopAndStack
             Physics2D.gravity = direction * gravityStrength;
             UpdateGameOverLine(direction);
             UpdatePhaseText();
+            TriggerFlash(direction);
         }
 
         private void UpdateGameOverLine(Vector2 gravityDirection)
@@ -419,13 +519,58 @@ namespace PopAndStack
                 float xPos = -Mathf.Sign(gravityDirection.x) * (halfWidth - gameOverLineOffset);
                 gameOverTransform.position = new Vector2(xPos, 0f);
                 gameOverCollider.size = new Vector2(0.4f, halfHeight * 2f);
+                gameOverTransform.localScale = new Vector3(0.4f, halfHeight * 2f, 1f);
             }
             else
             {
                 float yPos = -Mathf.Sign(gravityDirection.y) * (halfHeight - gameOverLineOffset);
                 gameOverTransform.position = new Vector2(0f, yPos);
                 gameOverCollider.size = new Vector2(halfWidth * 2f, 0.4f);
+                gameOverTransform.localScale = new Vector3(halfWidth * 2f, 0.4f, 1f);
             }
+        }
+
+        private void TriggerFlash(Vector2 gravityDirection)
+        {
+            if (flashRenderer == null)
+            {
+                return;
+            }
+
+            Color flashColor = Color.Lerp(lineColor, Color.white, 0.4f);
+            if (gravityDirection.y > 0.1f)
+            {
+                flashColor = new Color(0.84f, 0.88f, 1f, 0.6f);
+            }
+            else if (gravityDirection.x > 0.1f)
+            {
+                flashColor = new Color(0.90f, 0.84f, 1f, 0.6f);
+            }
+            else if (gravityDirection.x < -0.1f)
+            {
+                flashColor = new Color(1f, 0.88f, 0.84f, 0.6f);
+            }
+            else
+            {
+                flashColor = new Color(0.90f, 1f, 0.90f, 0.6f);
+            }
+
+            flashRenderer.color = flashColor;
+            flashTimer = flashDuration;
+        }
+
+        private void UpdateFlash()
+        {
+            if (flashRenderer == null || flashTimer <= 0f)
+            {
+                return;
+            }
+
+            flashTimer -= Time.deltaTime;
+            float t = Mathf.Clamp01(flashTimer / flashDuration);
+            Color color = flashRenderer.color;
+            color.a = t * 0.35f;
+            flashRenderer.color = color;
         }
 
         private void UpdateComboDecay()

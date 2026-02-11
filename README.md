@@ -5,7 +5,7 @@ PopAndStack is a hyper-casual merge game prototype for Android. Tap to drop ball
 ## Quick Start (Unity)
 
 1. Open the project in Unity 2022.3 LTS or newer.
-2. Create a new empty scene and save it as `Main`.
+2. Open the `Main` scene from `Assets/Scenes`.
 3. Press Play. The game auto-spawns the manager and builds the scene at runtime.
 
 ## Controls
@@ -24,6 +24,21 @@ PopAndStack is a hyper-casual merge game prototype for Android. Tap to drop ball
 ## Monetization Hook (not implemented)
 
 - Rewarded ad: offer a second chance by removing the top ball.
+- Interstitial: show after a game over every few runs.
+
+## Ads Integration (AdMob)
+
+This project includes a placeholder ads wrapper. To enable real ads:
+
+1. Import Google Mobile Ads SDK for Unity.
+2. Replace placeholder IDs with your AdMob App ID and Ad Unit IDs.
+3. Wire up rewarded callbacks to grant a second chance.
+
+Placeholders live in `Assets/Scripts/Ads/AdsService.cs`.
+
+## Play Store Prep
+
+Use the text placeholders in `store/` to build your listing.
 
 ## Notes
 

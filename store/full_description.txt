@@ -1,0 +1,8 @@
+PopAndStack is a fast, cozy merge game with a twist: gravity shifts every few seconds. Drop pastel balls, merge matching colors, and chain combos for huge scores. When gravity flips, the danger line moves, so every drop matters.
+
+- One tap controls
+- Gravity phases (down, left, up, right)
+- Combo scoring and satisfying merges
+- Short, replayable runs
+
+Play to climb the scoreboard, collect perfect merges, and master the shifts.
