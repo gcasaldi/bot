@@ -85,6 +85,9 @@
       box-shadow: 0 20px 60px rgba(32, 32, 32, 0.18);
       background: linear-gradient(170deg, #fde7df, #d8e8ff);
       aspect-ratio: 3 / 4;
+      width: 100%;
+      height: min(78vh, 720px);
+      min-height: 420px;
     }
 
     canvas {
@@ -161,6 +164,11 @@
 
       .panel {
         order: -1;
+      }
+
+      .canvas-wrap {
+        height: min(64vh, 560px);
+        min-height: 320px;
       }
     }
   </style>
